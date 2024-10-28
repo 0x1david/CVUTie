@@ -2,8 +2,9 @@ use anyhow::Result;
 mod config;
 
 use clap::{Parser, Subcommand};
+use config::Config;
 
-const CONFIG: &str = "./.cvutie";
+const CONFIG: &str = ".cvutie";
 
 #[derive(Parser)]
 #[command(name = "cvutie")]
@@ -54,6 +55,42 @@ enum Commands {
         #[arg(long = "force")]
         force: bool,
     },
+}
+
+fn get_configuration() -> Config {
+    let home = std::env::var_os("HOME");
+    if home.is_none() {
+        eprintln!("Could not find or read home directory. Please ensure $HOME environment variable is set");
+        return Config::default();
+    };
+    let home = home.unwrap();
+    let home = home.to_string_lossy();
+
+    let config_path = format!("{}/{}", home, CONFIG);
+
+    match Config::load(config_path) {
+        Ok(config) => config,
+        Err(_) => {
+            println!(
+                "Couldn't detect a `.cvutie` file in `{home}`. Creating a config file with defaults.."
+            );
+            let config = Config::default();
+            if let Err(e) = config.save(home.to_string()) {
+                if e.downcast_ref::<std::io::Error>().is_some() {
+                    println!("Failed to create config file: No permission to write in home directory. Changing config won't be possible.");
+                } else if e.downcast_ref::<serde_json::Error>().is_some() {
+                    eprintln!(
+                        "Failed to serialize config: Internal error occurred while writing config."
+                    );
+                    std::process::exit(1);
+                } else {
+                    eprintln!("An unexpected error occurred");
+                    std::process::exit(1);
+                };
+            }
+            config
+        }
+    }
 }
 
 fn main() {
